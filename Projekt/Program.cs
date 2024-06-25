@@ -1,8 +1,9 @@
-﻿using GLFW;
-using OpenTK;
+﻿using OpenTK;
 using OpenTK.Audio.OpenAL;
-using HelpersNS;
+using GLFW;
+using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace PMLabs
 {
@@ -25,29 +26,30 @@ namespace PMLabs
         static Queue<int> soundQueue = new Queue<int>();
         static int currentSourceIndex = -1;
 
-
-
-        public static void KeyProcessor(System.IntPtr window, Keys key, int scanCode, InputState state, ModifierKeys mods)
+        static void Main(string[] args)
         {
-            /*
-            int sourcestate;
-            AL.GetSource(source, ALGetSourcei.SourceState, out sourcestate);
-            int sourcestate2;
-            AL.GetSource(source2, ALGetSourcei.SourceState, out sourcestate2);
-            int sourcestate3;
-            AL.GetSource(source3, ALGetSourcei.SourceState, out sourcestate3);
-            int sourcestate4;
-            AL.GetSource(source4, ALGetSourcei.SourceState, out sourcestate4);
-            int sourcestate5;
-            AL.GetSource(source5, ALGetSourcei.SourceState, out sourcestate5);
-            int sourcestate6;
-            AL.GetSource(source6, ALGetSourcei.SourceState, out sourcestate6);
-            int sourcestate7;
-            AL.GetSource(source7, ALGetSourcei.SourceState, out sourcestate7);
-            int sourcestate8;
-            AL.GetSource(source8, ALGetSourcei.SourceState, out sourcestate8);
-            */
+            Glfw.Init();
 
+            Window window = Glfw.CreateWindow(500, 500, "OpenAL", GLFW.Monitor.None, Window.None);
+            Glfw.MakeContextCurrent(window);
+            Glfw.SetKeyCallback(window, kc);
+
+            InitSound();
+            QueueMusic();
+
+            while (!Glfw.WindowShouldClose(window))
+            {
+                SoundEvents();
+                Glfw.PollEvents();
+            }
+
+            FreeSound();
+            Glfw.Terminate();
+        }
+
+        public static void KeyProcessor(IntPtr window, Keys key, int scanCode, InputState state, ModifierKeys mods)
+        {
+            // Implement key processing if needed
         }
 
         public static short Signal(double t, double f, double A)
@@ -58,43 +60,46 @@ namespace PMLabs
         public static void InitSound()
         {
             device = ALC.OpenDevice(null);
-            context = ALC.CreateContext(device, new ALContextAttributes());
+            context = ALC.CreateContext(device, (int[])null);
             ALC.MakeContextCurrent(context);
 
-            for (int i = 0; i < 8; i++)
-            {
-                buffers[i] = AL.GenBuffer();
-            }
+            AL.GenBuffers(buffers);
+            AL.GenSources(sources);
+        }
 
-            double[] frequencies = { 261.6, 293.7, 329.6, 349.2, 392.0, 440.0, 493.9, 523.3 };
-            double A = short.MaxValue;
-            int fp = 44100;
-            double op = 1.0 / fp;
-            int lp = 1 * fp;
-
-            for (int i = 0; i < 8; i++)
+        public static void QueueMusic()
+        {
+            // Example song: C4 (261.63 Hz), D4 (293.66 Hz), E4 (329.63 Hz), rest, G4 (392.00 Hz)
+            List<(double frequency, double duration)> song = new List<(double, double)>
             {
-                short[] data = new short[lp];
-                for (int x = 0; x < lp; x++)
+                (261.63, 0.5), // C4
+                (293.66, 0.5), // D4
+                (329.63, 0.5), // E4
+                (0.0, 0.5),    // Rest
+                (392.00, 0.5)  // G4
+            };
+
+            for (int i = 0; i < song.Count; i++)
+            {
+                var (frequency, duration) = song[i];
+                int sampleRate = 44100;
+                int samples = (int)(duration * sampleRate);
+                short[] data = new short[samples];
+
+                for (int j = 0; j < samples; j++)
                 {
-                    data[x] = Signal(op * x, frequencies[i], A);
+                    double t = j / (double)sampleRate;
+                    data[j] = Signal(t, frequency, 32760);
                 }
-                AL.BufferData(buffers[i], ALFormat.Mono16, data, fp);
-            }
 
-            for (int i = 0; i < 8; i++)
-            {
-                sources[i] = AL.GenSource();
-                AL.Source(sources[i], ALSourceb.Looping, false);
-                AL.BindBufferToSource(sources[i], buffers[i]);
-            }
+                GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+                IntPtr dataPtr = handle.AddrOfPinnedObject();
 
-            // Example song sequence
-            // You can modify this sequence to create your own song
-            int[] songSequence = { 0, 1, 2, 3, 4, 5, 6, 7 };
-            foreach (var index in songSequence)
-            {
-                soundQueue.Enqueue(index);
+                AL.BufferData(buffers[i], ALFormat.Mono16, dataPtr, data.Length * sizeof(short), sampleRate);
+                handle.Free();
+
+                AL.SourceQueueBuffer(sources[i], buffers[i]);
+                soundQueue.Enqueue(i);
             }
 
             PlayNextSound();
@@ -143,27 +148,6 @@ namespace PMLabs
                     PlayNextSound();
                 }
             }
-        }
-
-        static void Main(string[] args)
-        {
-            Glfw.Init();
-
-            Window window = Glfw.CreateWindow(500, 500, "OpenAL", GLFW.Monitor.None, Window.None);
-
-            Glfw.MakeContextCurrent(window);
-            Glfw.SetKeyCallback(window, kc);
-
-            InitSound();
-
-            while (!Glfw.WindowShouldClose(window))
-            {
-                SoundEvents();
-                Glfw.PollEvents();
-            }
-
-            FreeSound();
-            Glfw.Terminate();
         }
     }
 }
