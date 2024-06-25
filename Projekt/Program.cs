@@ -21,8 +21,8 @@ namespace PMLabs
 
         static ALDevice device;
         static ALContext context;
-        static int[] buffers = new int[8];
-        static int[] sources = new int[8];
+        static List<int> buffers = new List<int>();
+        static List<int> sources = new List<int>();
         static Queue<int> soundQueue = new Queue<int>();
         static int currentSourceIndex = -1;
 
@@ -62,26 +62,77 @@ namespace PMLabs
             device = ALC.OpenDevice(null);
             context = ALC.CreateContext(device, (int[])null);
             ALC.MakeContextCurrent(context);
-
-            AL.GenBuffers(buffers);
-            AL.GenSources(sources);
         }
 
         public static void QueueMusic()
         {
-            // Example song: C4 (261.63 Hz), D4 (293.66 Hz), E4 (329.63 Hz), rest, G4 (392.00 Hz)
             List<(double frequency, double duration)> song = new List<(double, double)>
             {
-                (261.63, 0.5), // C4
-                (293.66, 0.5), // D4
-                (329.63, 0.5), // E4
-                (0.0, 0.5),    // Rest
-                (392.00, 0.5)  // G4
+                (246.94, 0.5),
+                (277.18, 0.5),
+                (293.66, 0.5),
+                (0.0, 0.1),
+                (293.66, 0.5),
+                (329.63, 0.5),
+                (277.18, 0.5),
+                (0.0, 0.1),
+                (246.94, 0.5),
+                (0.0, 0.1),
+                (220.00, 0.5),
+
+                (0.0, 0.5),
+
+                (246.94, 0.5),
+                (246.94, 0.5),
+                (277.18, 0.5),
+                (293.66, 0.5),
+                (0.0, 0.1),
+                (246.94, 0.5),
+                (220.00, 0.5),
+                (440.00, 0.5),
+                (440.00, 0.5),
+                (329.63, 0.5),
+
+                (0.0, 0.5),
+
+                (246.94, 0.5),
+                (246.94, 0.5),
+                (277.18, 0.5),
+                (0.0, 0.1),
+                (293.66, 0.5),
+                (0.0, 0.1),
+                (246.94, 0.5),
+                (293.66, 0.5),
+                (329.63, 0.5),
+                (277.18, 0.5),
+                (0.0, 0.1),
+                (246.94, 0.5),
+                (277.18, 0.5),
+                (0.0, 0.1),
+                (246.94, 0.5),
+                (0.0, 0.1),
+                (220.00, 0.5),
+
+                (0.0, 0.5),
+
+                (246.94, 0.5),
+                (246.94, 0.5),
+                (0.0, 0.1),
+                (277.18, 0.5),
+                (293.66, 0.5),
+                (246.94, 0.5),
+                (220.00, 0.5),
+                (329.63, 0.5),
+                (0.0, 0.1),
+                (329.63, 0.5),
+                (329.63, 0.5),
+                (0.0, 0.1),
+                (369.99, 0.5),
+                (329.63, 0.5)
             };
 
-            for (int i = 0; i < song.Count; i++)
+            foreach (var (frequency, duration) in song)
             {
-                var (frequency, duration) = song[i];
                 int sampleRate = 44100;
                 int samples = (int)(duration * sampleRate);
                 short[] data = new short[samples];
@@ -92,14 +143,20 @@ namespace PMLabs
                     data[j] = Signal(t, frequency, 32760);
                 }
 
+                int buffer = AL.GenBuffer();
+                int source = AL.GenSource();
+
                 GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
                 IntPtr dataPtr = handle.AddrOfPinnedObject();
 
-                AL.BufferData(buffers[i], ALFormat.Mono16, dataPtr, data.Length * sizeof(short), sampleRate);
+                AL.BufferData(buffer, ALFormat.Mono16, dataPtr, data.Length * sizeof(short), sampleRate);
                 handle.Free();
 
-                AL.SourceQueueBuffer(sources[i], buffers[i]);
-                soundQueue.Enqueue(i);
+                AL.SourceQueueBuffer(source, buffer);
+
+                buffers.Add(buffer);
+                sources.Add(source);
+                soundQueue.Enqueue(sources.Count - 1);
             }
 
             PlayNextSound();
@@ -107,11 +164,15 @@ namespace PMLabs
 
         public static void FreeSound()
         {
-            for (int i = 0; i < 8; i++)
+            foreach (var source in sources)
             {
-                AL.SourceStop(sources[i]);
-                AL.DeleteSource(sources[i]);
-                AL.DeleteBuffer(buffers[i]);
+                AL.SourceStop(source);
+                AL.DeleteSource(source);
+            }
+
+            foreach (var buffer in buffers)
+            {
+                AL.DeleteBuffer(buffer);
             }
 
             if (context != ALContext.Null)
